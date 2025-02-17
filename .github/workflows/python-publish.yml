@@ -37,6 +37,9 @@ jobs:
       - name: Update Poetry configuration
         run: poetry config virtualenvs.create false
 
+      - name: List repository files
+        run: ls -la
+
       - name: Install dependencies
         run: poetry install --sync --no-interaction
 
