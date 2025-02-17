@@ -50,5 +50,4 @@ jobs:
         run: poetry build
 
       - name: Publish package distributions to PyPI
-        working-directory: ./dhparkeren
         uses: pypa/gh-action-pypi-publish@release/v1
