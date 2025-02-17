@@ -30,26 +30,20 @@ jobs:
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python - -y
+          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Update PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+#      - name: Update PATH
+#        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Update Poetry configuration
-        working-directory: ./dhparkeren
         run: poetry config virtualenvs.create false
 
-      - name: List repository files
-        run: ls -la
-
       - name: Install dependencies
-        working-directory: ./dhparkeren
         run: poetry install --sync --no-interaction
 
       - name: Package project
-        working-directory: ./dhparkeren
         run: |
           poetry build
-          ls -la dist/
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
