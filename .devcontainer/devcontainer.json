@@ -34,7 +34,6 @@
 			"visualstudioexptteam.vscodeintellicode",
 			"visualstudioexptteam.vscodeintellicode-completions",
 			"charliermarsh.ruff",
-			"ms-vscode-remote.remote-containers",
 			"ms-python.python",
 			"github.codespaces"
 		  ]

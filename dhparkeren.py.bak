@@ -1,0 +1,557 @@
+# """
+# Module voor API-communicatie met asynchrone sessiebeheer, tijd- en kentekenvalidatie.
+# """
+
+# import asyncio
+# import base64
+# import datetime
+# import json
+# import logging
+# import random
+# import re
+# from typing import Any, Dict, Optional, Tuple
+
+# import aiohttp
+# from aiohttp import ClientResponse
+
+# # ---------------------------------------------------
+# # Logging Configuratie & Async Logging Helper
+# # ---------------------------------------------------
+
+# logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+# LOGGER = logging.getLogger(__name__)
+
+
+# async def async_log_event(event_type: str, details: Dict[str, Any]) -> None:
+#     """
+#     Asynchrone logging van gebeurtenissen.
+#     """
+#     log_data = {"event": event_type, "details": details}
+#     LOGGER.info(json.dumps(log_data))
+
+
+# # ---------------------------------------------------
+# # Configuratie Klassen
+# # ---------------------------------------------------
+
+
+# class Secrets:
+#     """
+#     Houdt inloggegevens vast.
+#     """
+
+#     def __init__(self, username: str, password: str) -> None:
+#         self.username = username
+#         self.password = password
+
+
+# class Config:
+#     """
+#     Houdt configuratievariabelen vast.
+#     """
+
+#     def __init__(self, base_url: str) -> None:
+#         self.base_url = base_url
+
+
+# # ---------------------------------------------------
+# # Sessie Beheer (SessionManager)
+# # ---------------------------------------------------
+
+
+# class SessionManager:
+#     """
+#     Beheert de HTTP-sessie en authenticatie met asynchrone contextmanagement.
+#     """
+
+#     def __init__(
+#         self, secrets: Secrets, config: Config, session_timeout: int = 30
+#     ) -> None:
+#         self.secrets = secrets
+#         self.config = config
+#         self.session_cookie: Optional[str] = None
+#         self.session_timeout = session_timeout
+#         self.session = aiohttp.ClientSession(
+#             connector=aiohttp.TCPConnector(limit_per_host=10),
+#             timeout=aiohttp.ClientTimeout(total=self.session_timeout),
+#         )
+#         self._session_lock = asyncio.Lock()
+
+#     async def __aenter__(self) -> "SessionManager":
+#         return self
+
+#     async def __aexit__(self, exc_type, exc, tb) -> None:
+#         await self.close()
+
+#     async def close(self) -> None:
+#         """
+#         Sluit de HTTP-sessie.
+#         """
+#         await self.session.close()
+
+#     def create_headers(self) -> Dict[str, str]:
+#         """
+#         Retourneert standaard HTTP-headers voor JSON-communicatie.
+#         """
+#         return {
+#             "Accept": "application/json",
+#             "Content-Type": "application/json",
+#             "X-Requested-With": "angular",
+#         }
+
+#     async def fetch_new_session(self) -> Optional[str]:
+#         """
+#         Haalt een nieuwe sessie-cookie op als er geen geldige sessie bestaat.
+#         """
+#         async with self._session_lock:
+#             if self.session_cookie:
+#                 await async_log_event(
+#                     "session",
+#                     {"msg": "Reusing existing session", "cookie": self.session_cookie},
+#                 )
+#                 return self.session_cookie
+
+#             await async_log_event("session", {"msg": "Requesting new session..."})
+#             credentials = f"{self.secrets.username}:{self.secrets.password}".encode()
+#             auth = "Basic " + base64.b64encode(credentials).decode()
+#             headers = self.create_headers()
+#             headers["Authorization"] = auth
+
+#             url = f"{self.config.base_url}/api/session"
+#             try:
+#                 async with self.session.get(url, headers=headers) as response:
+#                     if response.status not in range(200, 300):
+#                         await async_log_event(
+#                             "error",
+#                             {
+#                                 "msg": "Session request failed",
+#                                 "status": response.status,
+#                             },
+#                         )
+#                         return None
+
+#                     # Zorg dat we de waarde van de cookie teruggeven
+#                     cookie = response.cookies.get("session")
+#                     if cookie is not None:
+#                         self.session_cookie = cookie.value
+#                     else:
+#                         self.session_cookie = None
+#                     await async_log_event(
+#                         "session",
+#                         {"msg": "New session acquired", "cookie": self.session_cookie},
+#                     )
+#                     return self.session_cookie
+#             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+#                 LOGGER.exception("Error fetching new session: %s", e)
+#                 return None
+
+
+# # ---------------------------------------------------
+# # Time Utilities (TimeController)
+# # ---------------------------------------------------
+
+
+# class TimeController:
+#     """
+#     Hulpmiddelen voor het parsen en valideren van ISO 8601 tijdstempels.
+#     """
+
+#     @staticmethod
+#     def parse_iso_datetime(time_str: str) -> Optional[datetime.datetime]:
+#         try:
+#             return datetime.datetime.fromisoformat(time_str)
+#         except ValueError:
+#             return None
+
+#     @staticmethod
+#     def is_valid_time_range(start_time: str, end_time: str) -> bool:
+#         start_dt = TimeController.parse_iso_datetime(start_time)
+#         end_dt = TimeController.parse_iso_datetime(end_time)
+#         if start_dt is None or end_dt is None:
+#             return False
+#         return end_dt > start_dt
+
+
+# # ---------------------------------------------------
+# # License Plate Utilities (LicensePlateController)
+# # ---------------------------------------------------
+
+
+# class LicensePlateController:
+#     """
+#     Normaliseert en valideert kentekenplaten.
+#     """
+
+#     @staticmethod
+#     def normalize(plate: str) -> str:
+#         return re.sub(r"[-_\s]", "", plate).upper()
+
+#     @staticmethod
+#     def is_valid(plate: str) -> bool:
+#         return re.fullmatch(r"^[A-Z0-9]{1,12}$", plate) is not None
+
+
+# # ---------------------------------------------------
+# # Input Validatie (InputValidator)
+# # ---------------------------------------------------
+
+
+# class InputValidator:
+#     """
+#     Verplaatst validatie-checks (en logging) naar een centrale plek om dubbele logging te voorkomen.
+#     """
+
+#     ISO8601_REGEX = re.compile(
+#         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?$"
+#     )
+
+#     @staticmethod
+#     def is_iso8601(time_str: str) -> bool:
+#         """
+#         Controleert of een tijdstring voldoet aan het ISO 8601-formaat.
+#         """
+#         return bool(InputValidator.ISO8601_REGEX.fullmatch(time_str))
+
+#     @staticmethod
+#     async def validate_license_plate(license_plate: str) -> Optional[str]:
+#         normalized_plate = LicensePlateController.normalize(license_plate)
+#         if not LicensePlateController.is_valid(normalized_plate):
+#             await async_log_event(
+#                 "error",
+#                 {"msg": "Invalid license plate format", "license_plate": license_plate},
+#             )
+#             return None
+#         return normalized_plate
+
+#     @staticmethod
+#     async def validate_reservation_times(
+#         start_time: str, end_time: str
+#     ) -> Optional[Tuple[str, str]]:
+#         """
+#         Valideert de ISO8601-formaten, de tijdsvolgorde en controleert dat de starttijd in de toekomst ligt.
+#         """
+#         if not InputValidator.is_iso8601(start_time):
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "Start time is not in ISO 8601 format",
+#                     "start_time": start_time,
+#                 },
+#             )
+#             return None
+#         if not InputValidator.is_iso8601(end_time):
+#             await async_log_event(
+#                 "error",
+#                 {"msg": "End time is not in ISO 8601 format", "end_time": end_time},
+#             )
+#             return None
+
+#         if not TimeController.is_valid_time_range(start_time, end_time):
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "Invalid time range: end_time must be after start_time",
+#                     "start_time": start_time,
+#                     "end_time": end_time,
+#                 },
+#             )
+#             return None
+
+#         now = datetime.datetime.now()
+#         start_dt = TimeController.parse_iso_datetime(start_time)
+#         if start_dt is None:
+#             await async_log_event(
+#                 "error", {"msg": "Invalid start_time", "start_time": start_time}
+#             )
+#             return None
+#         if start_dt < now:
+#             await async_log_event(
+#                 "error",
+#                 {"msg": "Start time may not lie in the past", "start_time": start_time},
+#             )
+#             return None
+
+#         return start_time, end_time
+
+#     @staticmethod
+#     async def validate_new_end_time(
+#         current_start_time: str, new_end_time: str
+#     ) -> Optional[str]:
+#         if not InputValidator.is_iso8601(new_end_time):
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "New end time is not in ISO 8601 format",
+#                     "new_end_time": new_end_time,
+#                 },
+#             )
+#             return None
+
+#         if not TimeController.is_valid_time_range(current_start_time, new_end_time):
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "Invalid time range: new end_time must be after start_time",
+#                     "start_time": current_start_time,
+#                     "new_end_time": new_end_time,
+#                 },
+#             )
+#             return None
+#         return new_end_time
+
+
+# # ---------------------------------------------------
+# # API-Client
+# # ---------------------------------------------------
+
+
+# class ApiClient:
+#     """
+#     Voert API-aanroepen uit met behulp van SessionManager en implementeert retry-logica.
+#     """
+
+#     def __init__(self, session_manager: SessionManager, max_retries: int = 5) -> None:
+#         self.session_manager = session_manager
+#         self.max_retries = max_retries
+
+#     async def safe_json(self, response: ClientResponse) -> Dict[str, Any]:
+#         """
+#         Probeert een geldige JSON-respons te decoderen.
+#         """
+#         try:
+#             return await response.json()
+#         except json.decoder.JSONDecodeError as e:
+#             LOGGER.exception("JSON decode error: %s", e)
+#             return {"error": "Invalid JSON response", "status": response.status}
+
+#     async def request_data(
+#         self,
+#         method: str,
+#         endpoint: str,
+#         data: Optional[Dict[str, Any]] = None,
+#         extra_headers: Optional[Dict[str, str]] = None,
+#     ) -> Optional[Dict[str, Any]]:
+#         """
+#         Voert een HTTP-request uit met retry-logica. Bij een 401-response wordt de sessie vernieuwd.
+#         """
+#         attempt = 0
+#         retried_401 = False
+
+#         while attempt < self.max_retries:
+#             session_cookie = await self.session_manager.fetch_new_session()
+#             if not session_cookie:
+#                 await async_log_event("error", {"msg": "No valid session cookie found"})
+#                 return None
+
+#             url = f"{self.session_manager.config.base_url}{endpoint}"
+#             headers = self.session_manager.create_headers()
+#             if extra_headers:
+#                 headers.update(extra_headers)
+#             cookies = {"session": session_cookie}
+
+#             try:
+#                 async with self.session_manager.session.request(
+#                     method, url, headers=headers, cookies=cookies, json=data
+#                 ) as response:
+#                     if response.status == 401 and not retried_401:
+#                         retried_401 = True
+#                         await async_log_event(
+#                             "warning",
+#                             {
+#                                 "msg": "Session expired; refreshing...",
+#                                 "endpoint": endpoint,
+#                             },
+#                         )
+#                         self.session_manager.session_cookie = None  # Reset sessie
+#                         attempt += 1
+#                         continue
+
+#                     response_json = await self.safe_json(response)
+#                     await async_log_event(
+#                         "response",
+#                         {"status": response.status, "endpoint": endpoint},
+#                     )
+#                     if response.status != 200:
+#                         await async_log_event(
+#                             "error",
+#                             {
+#                                 "msg": f"Request failed with status {response.status}",
+#                                 "response": response_json,
+#                             },
+#                         )
+#                     return response_json
+
+#             except aiohttp.ClientError as e:
+#                 LOGGER.exception("Client error for endpoint %s: %s", endpoint, e)
+#             attempt += 1
+#             backoff = random.uniform(2**attempt, 2 ** (attempt + 1))
+#             await asyncio.sleep(backoff)
+
+#         await async_log_event("error", {"msg": f"Max retries reached for {endpoint}"})
+#         return None
+
+#     async def has_overlapping_reservation(
+#         self, license_plate: str, start_time: str, end_time: str
+#     ) -> bool:
+#         """
+#         Controleert of er al een overlappende reservering bestaat voor het opgegeven kenteken.
+#         """
+#         reservations_data = await self.get_reservations()
+#         if not reservations_data:
+#             return False
+#         reservations = reservations_data.get("reservations", [])
+#         for res in reservations:
+#             if res.get("license_plate", "").upper() == license_plate:
+#                 res_start = res.get("start_time")
+#                 res_end = res.get("end_time")
+#                 if (
+#                     res_start
+#                     and res_end
+#                     and TimeController.is_valid_time_range(start_time, end_time)
+#                     and TimeController.parse_iso_datetime(start_time)
+#                     < TimeController.parse_iso_datetime(res_end)
+#                     and TimeController.parse_iso_datetime(res_start)
+#                     < TimeController.parse_iso_datetime(end_time)
+#                 ):
+#                     return True
+#         return False
+
+#     async def get_account(self) -> Optional[Dict[str, Any]]:
+#         """
+#         Haalt accountinformatie op.
+#         """
+#         return await self.request_data("GET", "/api/account/0")
+
+    # async def get_favorites(self) -> Optional[Dict[str, Any]]:
+    #     """
+    #     Haalt favoriete items op.
+    #     """
+    #     headers = {"x-data-limit": "100", "x-data-offset": "0"}
+    #     return await self.request_data("GET", "/api/favorite", extra_headers=headers)
+
+#     async def add_favorite(
+#         self, name: str, license_plate: str
+#     ) -> Optional[Dict[str, Any]]:
+#         """
+#         Voegt een favoriet toe.
+#         """
+#         normalized_plate = await InputValidator.validate_license_plate(license_plate)
+#         if normalized_plate is None:
+#             return None
+#         data = {"name": name, "license_plate": normalized_plate}
+#         return await self.request_data("POST", "/api/favorite", data)
+
+#     async def update_favorite(
+#         self, favorite_id: int, name: str, license_plate: str
+#     ) -> Optional[Dict[str, Any]]:
+#         """
+#         Wijzigt een favoriet.
+#         """
+#         normalized_plate = await InputValidator.validate_license_plate(license_plate)
+#         if normalized_plate is None:
+#             return None
+#         data = {"name": name, "license_plate": normalized_plate}
+#         return await self.request_data("PATCH", f"/api/favorite/{favorite_id}", data)
+
+#     async def delete_favorite(self, favorite_id: int) -> Optional[Dict[str, Any]]:
+#         """
+#         Verwijdert een favoriet.
+#         """
+#         return await self.request_data("DELETE", f"/api/favorite/{favorite_id}")
+
+#     async def get_history(self) -> Optional[Dict[str, Any]]:
+#         """
+#         Haalt geschiedenis op.
+#         """
+#         headers = {"x-data-limit": "20", "x-data-offset": "0"}
+#         return await self.request_data("GET", "/api/history", extra_headers=headers)
+
+#     async def get_reservations(self) -> Optional[Dict[str, Any]]:
+#         """
+#         Haalt reserveringen op.
+#         """
+#         return await self.request_data("GET", "/api/reservation")
+
+#     async def add_reservation(
+#         self,
+#         name: str,
+#         license_plate: str,
+#         start_time: str,
+#         end_time: str,
+#     ) -> Optional[Dict[str, Any]]:
+#         """
+#         Voegt een reservering toe na validatie van kenteken en tijden.
+#         """
+#         normalized_plate = await InputValidator.validate_license_plate(license_plate)
+#         if normalized_plate is None:
+#             return None
+
+#         times = await InputValidator.validate_reservation_times(start_time, end_time)
+#         if times is None:
+#             return None
+#         start_time_valid, end_time_valid = times
+
+#         if await self.has_overlapping_reservation(
+#             normalized_plate, start_time_valid, end_time_valid
+#         ):
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "Overlapping reservation exists for this license plate",
+#                     "license_plate": normalized_plate,
+#                     "start_time": start_time_valid,
+#                     "end_time": end_time_valid,
+#                 },
+#             )
+#             return None
+
+#         data = {
+#             "name": name,
+#             "license_plate": normalized_plate,
+#             "start_time": start_time_valid,
+#             "end_time": end_time_valid,
+#         }
+#         return await self.request_data("POST", "/api/reservation", data)
+
+#     async def update_reservation(
+#         self, reservation_id: int, end_time: str
+#     ) -> Optional[Dict[str, Any]]:
+#         """
+#         Update de reservering: controleert of de nieuwe eindtijd na de bestaande starttijd ligt.
+#         """
+#         reservation = await self.request_data(
+#             "GET", f"/api/reservation/{reservation_id}"
+#         )
+#         if not reservation:
+#             await async_log_event(
+#                 "error",
+#                 {"msg": "Reservation not found", "reservation_id": reservation_id},
+#             )
+#             return None
+#         current_start_time = reservation.get("start_time")
+#         if current_start_time is None:
+#             await async_log_event(
+#                 "error",
+#                 {
+#                     "msg": "Reservation start time not found",
+#                     "reservation_id": reservation_id,
+#                 },
+#             )
+#             return None
+#         new_end_time_valid = await InputValidator.validate_new_end_time(
+#             current_start_time, end_time
+#         )
+#         if new_end_time_valid is None:
+#             return None
+
+#         return await self.request_data(
+#             "PATCH",
+#             f"/api/reservation/{reservation_id}",
+#             {"end_time": new_end_time_valid},
+#         )
+
+#     async def delete_reservation(self, reservation_id: int) -> Optional[Dict[str, Any]]:
+#         """
+#         Verwijdert een reservering.
+#         """
+#         return await self.request_data("DELETE", f"/api/reservation/{reservation_id}")
