@@ -161,7 +161,8 @@ class ReservationManager:
         result = await self.api_client.request_data(
             "PATCH", f"/api/reservation/{reservation_id}", {"end_time": new_end_time_valid}
         )
-        if result and result.get("success"):
+        # Controleer op "success" of op "id", omdat de API geen "success" key retourneert
+        if result and (result.get("success") or result.get("id")):
             await async_log_event(
                 "success",
                 {"msg": "Reservation updated successfully", "reservation_id": reservation_id}
@@ -184,7 +185,8 @@ class ReservationManager:
             Optional[Dict[str, Any]]: The API response as a dictionary if successful, otherwise None.
         """
         result = await self.api_client.request_data("DELETE", f"/api/reservation/{reservation_id}")
-        if result and result.get("success"):
+        # Beschouw een lege dictionary als een succesvolle delete (204 No Content)
+        if result == {} or (result and result.get("id")):
             await async_log_event(
                 "success",
                 {"msg": "Reservation deleted successfully", "reservation_id": reservation_id}

@@ -7,7 +7,7 @@
 # to avoid duplicate logging.
 # ---------------------------------------------------
 
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import Optional, Tuple
 
@@ -111,7 +111,7 @@ class InputValidator:
     This class provides methods to validate license plates and reservation times.
     """
     ISO8601_REGEX = re.compile(
-        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?$"
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:[+-]\d{2}:\d{2}|Z)$"
     )
 
     @staticmethod
@@ -154,9 +154,7 @@ class InputValidator:
         return normalized_plate
 
     @staticmethod
-    async def validate_reservation_times(
-        start_time: str, end_time: str
-    ) -> Optional[Tuple[str, str]]:
+    async def validate_reservation_times(start_time: str, end_time: str) -> Optional[Tuple[str, str]]:
         """
         Validates the reservation times ensuring they are in ISO 8601 format, the time range is valid,
         and the start time is in the future.
@@ -192,7 +190,7 @@ class InputValidator:
             )
             return None
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)  # Maak nu timezone-aware
         start_dt = TimeController.parse_iso_datetime(start_time)
         if start_dt is None:
             await async_log_event(
@@ -230,7 +228,7 @@ class InputValidator:
             await async_log_event(
                 "error",
                 {
-                    "msg": "New end time is not in ISO 8601 format",
+                    "msg": "New end time is not in ISO 8601 format",
                     "new_end_time": new_end_time,
                 },
             )

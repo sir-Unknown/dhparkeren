@@ -275,17 +275,26 @@ class ApiClient:
             await async_log_event("success", {"msg": "Favorite deleted", "favorite_id": favorite_id})
         return result
 
-    async def get_history(self) -> Optional[Dict[str, Any]]:
+    async def get_history(self, extra_headers: Optional[Dict[str, str]] = None) -> list:
         """
-        Retrieves the history of actions or events from the API.
+        Retrieves history from the API.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing history data, or None if the request fails.
+            list: A list of history entries if successful, otherwise an empty list.
         """
         headers = {"x-data-limit": "20", "x-data-offset": "0"}
+        if extra_headers:
+            headers.update(extra_headers)
         result = await self.request_data("GET", "/api/history", extra_headers=headers)
-        if result:
-            await async_log_event("success", {"msg": "History retrieved", "history_entries": len(result.get("history", []))})
+        if result is None:
+            await async_log_event(
+                "error", {"msg": "Failed to retrieve history", "endpoint": "/api/history"}
+            )
+            return []
+        # Omdat we ervan uitgaan dat de API altijd een lijst retourneert:
+        await async_log_event(
+            "success", {"msg": "History retrieved", "history_entries": len(result)}
+        )
         return result
 
     async def get_reservations(self) -> Optional[Dict[str, Any]]:
