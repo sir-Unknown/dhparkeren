@@ -35,6 +35,7 @@ jobs:
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Update Poetry configuration
+        working-directory: ./dhparkeren
         run: poetry config virtualenvs.create false
 
       - name: List repository files
@@ -49,4 +50,5 @@ jobs:
         run: poetry build
 
       - name: Publish package distributions to PyPI
+        working-directory: ./dhparkeren
         uses: pypa/gh-action-pypi-publish@release/v1
