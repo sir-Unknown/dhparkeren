@@ -1,4 +1,34 @@
-#!/usr/bin/env python3
+"""""
+# test_live.py
+
+This script interacts with the DHParkeren API to perform various operations:
+- Retrieve account information
+- Fetch reservation history
+- Manage favorites (retrieve, add, update, delete)
+- Manage reservations (retrieve, add, update, delete)
+
+## Usage:
+Run the script with the desired arguments to perform specific operations:
+
+```sh
+python test_live.py --account --history --favorites --reservations
+```
+
+To execute the script, ensure you have set the required environment variables:
+
+```sh
+export DHPARKEREN_USERNAME="your_username"
+export DHPARKEREN_PASSWORD="your_password"
+```
+
+Alternatively, on Windows (PowerShell):
+
+```powershell
+$env:DHPARKEREN_USERNAME="your_username"
+$env:DHPARKEREN_PASSWORD="your_password"
+```
+"""
+
 import os
 import argparse
 import asyncio
@@ -12,10 +42,18 @@ from dhparkeren.favorites import FavoriteManager
 from dhparkeren.reservations import ReservationManager
 
 async def main(fetch_account: bool, fetch_history: bool, fetch_favorites: bool, fetch_reservations: bool):
-    # Gebruik de opgegeven base_url
+    """
+    Main function to handle API interactions based on provided arguments.
+    
+    Parameters:
+    - fetch_account (bool): Retrieve account details.
+    - fetch_history (bool): Fetch reservation history.
+    - fetch_favorites (bool): Manage favorites (retrieve, add, update, delete).
+    - fetch_reservations (bool): Manage reservations (retrieve, add, update, delete).
+    """
     config = Config(base_url="https://parkerendenhaag.denhaag.nl")
     
-    # Haal de inloggegevens uit de omgevingsvariabelen
+    # Retrieve login credentials from environment variables
     username = os.environ.get("DHPARKEREN_USERNAME")
     password = os.environ.get("DHPARKEREN_PASSWORD")
     
@@ -25,106 +63,98 @@ async def main(fetch_account: bool, fetch_history: bool, fetch_favorites: bool, 
     
     secrets = Secrets(username=username, password=password)
     
-    # Creëer een sessiemanager in een asynchrone context
     async with SessionManager(secrets, config) as session_manager:
-        # Maak een API-client
         api_client = ApiClient(session_manager)
         
-        # Accountgegevens ophalen
         if fetch_account:
             account_manager = AccountManager(api_client)
-            print("Haal accountgegevens op...")
+            print("Retrieving account details...")
             account_data = await account_manager.get_account()
-            print("Accountgegevens:")
+            print("Account details:")
             print(account_data)
         
-        # Reserveringshistorie ophalen (als de API hiervoor een aparte endpoint heeft)
         if fetch_history:
-            print("Haal reserveringshistorie op...")
-            history = await api_client.get_history()  # Zorg dat deze methode bestaat en een JSON-object of lijst retourneert.
-            print("Reserveringshistorie:")
+            print("Fetching reservation history...")
+            history = await api_client.get_history()
+            print("Reservation history:")
             print(history)
         
-        # Favorieten beheren
         if fetch_favorites:
             favorite_manager = FavoriteManager(api_client)
-            print("Haal huidige favorieten op...")
+            print("Retrieving current favorites...")
             favorites = await favorite_manager.get_favorites()
-            print("Favorieten:")
+            print("Favorites:")
             print(favorites)
             
-            # Voeg een nieuw favoriet-item toe
-            print("\nNieuw favoriet-item toevoegen...")
+            print("\nAdding a new favorite item...")
             add_fav_result = await favorite_manager.add_favorite("Test Favorite", "TEST123")
-            print("Toevoegresultaat:")
+            print("Addition result:")
             print(add_fav_result)
             
-            # Gebruik de sleutel "id" uit de response als identifier
             favorite_id = add_fav_result.get("id") if add_fav_result else None
             if not favorite_id:
-                print("Favoriet-item kon niet worden toegevoegd. Afsluiten.")
+                print("Failed to add favorite. Exiting.")
                 return
             
-            # Wacht 5 seconden en update het favoriet-item
             await asyncio.sleep(5)
-            print("\nFavoriet-item bijwerken...")
+            print("\nUpdating favorite item...")
             update_fav_result = await favorite_manager.update_favorite(favorite_id, "Updated Favorite", "TEST123")
-            print("Bijwerkresultaat:")
+            print("Update result:")
             print(update_fav_result)
             
-            # Wacht nog 5 seconden en verwijder het favoriet-item
             await asyncio.sleep(5)
-            print("\nFavoriet-item verwijderen...")
+            print("\nDeleting favorite item...")
             delete_fav_result = await favorite_manager.delete_favorite(favorite_id)
-            print("Verwijderresultaat:")
+            print("Deletion result:")
             print(delete_fav_result)
         
-        # Reserveringen beheren
         if fetch_reservations:
             reservation_manager = ReservationManager(api_client)
-            print("Haal huidige reserveringen op...")
+            print("Retrieving current reservations...")
             reservations = await reservation_manager.get_reservations()
-            print("Reserveringen:")
+            print("Reservations:")
             print(reservations)
             
-            # Voeg een nieuw reservering-item toe
             now = datetime.now(timezone.utc)
+            
+            # Example values (commented out for reference)
+            # start_time = "2025-02-15T10:00:00Z"
             start_time = (now + timedelta(hours=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            
+            # end_time = "2025-02-15T11:00:00Z"
             end_time = (now + timedelta(hours=2)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            print("\nNieuw reservering-item toevoegen...")
+            
+            print("\nAdding a new reservation...")
             add_res_result = await reservation_manager.add_reservation("Test Reservation", "TEST123", start_time, end_time)
-            print("Reservering toevoegen resultaat:")
+            print("Reservation addition result:")
             print(add_res_result)
             
-            # Gebruik de sleutel "id" uit de response als identifier
             reservation_id = add_res_result.get("id") if add_res_result else None
             if not reservation_id:
-                print("Reservering kon niet worden toegevoegd. Afsluiten.")
+                print("Failed to add reservation. Exiting.")
                 return
             
-            # Wacht 5 seconden en update de reservering (verleng de eindtijd)
             await asyncio.sleep(5)
             new_end_time = (now + timedelta(hours=3)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            print("\nReservering bijwerken...")
+            print("\nUpdating reservation...")
             update_res_result = await reservation_manager.update_reservation(reservation_id, new_end_time)
-            print("Reservering bijwerk resultaat:")
+            print("Update result:")
             print(update_res_result)
             
-            # Wacht nog 5 seconden en verwijder de reservering
             await asyncio.sleep(5)
-            print("\nReservering verwijderen...")
+            print("\nDeleting reservation...")
             delete_res_result = await reservation_manager.delete_reservation(reservation_id)
-            print("Reservering verwijder resultaat:")
+            print("Deletion result:")
             print(delete_res_result)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Voer DHParkeren operaties uit: accountgegevens, reserveringshistorie, favorieten en reserveringen."
+        description="Perform DHParkeren operations: account details, reservation history, favorites, and reservations."
     )
-    parser.add_argument("--account", action="store_true", default=False, help="Haal accountgegevens op.")
-    parser.add_argument("--history", action="store_true", default=False, help="Haal reserveringshistorie op.")
-    parser.add_argument("--favorites", action="store_true", default=False, help="Beheer favorieten (ophalen, toevoegen, bijwerken, verwijderen).")
-    parser.add_argument("--reservations", action="store_true", default=False, help="Beheer reserveringen (ophalen, toevoegen, bijwerken, verwijderen).")
+    parser.add_argument("--account", action="store_true", default=False, help="Retrieve account details.")
+    parser.add_argument("--history", action="store_true", default=False, help="Fetch reservation history.")
+    parser.add_argument("--favorites", action="store_true", default=False, help="Manage favorites (retrieve, add, update, delete).")
+    parser.add_argument("--reservations", action="store_true", default=False, help="Manage reservations (retrieve, add, update, delete).")
     args = parser.parse_args()
     
     asyncio.run(main(fetch_account=args.account,

@@ -91,6 +91,8 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+A more detailed example showcasing every function can be found in [/tests/test_live.py](/tests/test_live.py).
+
 ## Error Messages
 
 For a complete list of error codes and their corresponding messages, please refer to the [ERROR_MESSAGE.md](ERROR_MESSAGE.md) file. This document provides a mapping of API error codes to human-readable messages and includes a code example demonstrating how to use the error message mapping in your code.
