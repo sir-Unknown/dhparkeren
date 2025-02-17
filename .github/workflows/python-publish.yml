@@ -46,8 +46,9 @@ jobs:
         run: poetry install --sync --no-interaction
 
       - name: Package project
-        working-directory: ./dhparkeren
-        run: poetry build
+        run: |
+          poetry build
+          ls -la dist/
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
