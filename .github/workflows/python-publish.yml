@@ -41,6 +41,7 @@ jobs:
         run: ls -la
 
       - name: Install dependencies
+        working-directory: ./project
         run: poetry install --sync --no-interaction
 
       - name: Package project
