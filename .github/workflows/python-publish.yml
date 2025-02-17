@@ -46,6 +46,7 @@ jobs:
         run: poetry install --sync --no-interaction
 
       - name: Package project
+        working-directory: ./dhparkeren
         run: |
           poetry build
           ls -la dist/
