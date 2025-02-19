@@ -3,7 +3,9 @@
 
 The Hague Visitor Parking API is a Python library designed to interact with The Hague Visitor Parking system. It provides a collection of tools and classes to manage API calls, sessions, reservations, favorites, and input validation, while also offering comprehensive logging and error handling.
 
-> **Disclaimer:** This module has been developed specifically to be used within [Home Assistant](https://www.home-assistant.io/). It is designed to integrate with Home Assistant environments, and while it may be adaptable for other uses, its primary focus is Home Assistant integration.
+> **Disclaimer**
+> This module is not affiliated with or endorsed by the official parking app of the Municipality of The Hague.
+> This module has been developed specifically to be used within [Home Assistant](https://www.home-assistant.io/).
 
 ## Features
 
