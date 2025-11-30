@@ -6,7 +6,15 @@
 
 version: 2
 updates:
- - package-ecosystem: "devcontainers"
-   directory: "/"
-   schedule:
-     interval: weekly
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "poetry"
+    directory: "/" # waar pyproject.toml staat
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/" # altijd root voor workflows
+    schedule:
+      interval: "weekly"
