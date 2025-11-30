@@ -110,7 +110,3 @@ Contributions are welcome! If you have suggestions, bug reports, or improvements
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
-
-## Version
-
-Current version: **0.1.0**
